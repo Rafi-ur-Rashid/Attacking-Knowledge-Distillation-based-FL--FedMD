@@ -7,8 +7,7 @@ import pickle
 import numpy as np
 from tensorflow.keras.models import load_model
 
-from data_utils import load_MNIST_data, load_EMNIST_data, generate_bal_private_data,\
-generate_partial_data
+from data_utils import load_MNIST_data, load_EMNIST_data, generate_EMNIST_writer_based_data, generate_partial_data
 from FedMD import FedMD
 from Neural_Networks import train_models, cnn_2layer_fc_model, cnn_3layer_fc_model
 
@@ -20,7 +19,7 @@ def parseArg():
                         help='the config file for FedMD.'
                        )
 
-    conf_file = os.path.abspath("conf/EMNIST_balance_conf.json")
+    conf_file = os.path.abspath("conf/EMNIST_imbalance_conf.json")
     
     if len(sys.argv) > 1:
         args = parser.parse_args(sys.argv[1:])
@@ -69,7 +68,8 @@ if __name__ == "__main__":
     public_dataset = {"X": X_train_MNIST, "y": y_train_MNIST}
     
     
-    X_train_EMNIST, y_train_EMNIST, X_test_EMNIST, y_test_EMNIST, writer_ids_train, writer_ids_test \
+    X_train_EMNIST, y_train_EMNIST, X_test_EMNIST, y_test_EMNIST, \
+    writer_ids_train_EMNIST, writer_ids_test_EMNIST \
     = load_EMNIST_data(emnist_data_dir,
                        standarized = True, verbose = True)
     
@@ -77,12 +77,13 @@ if __name__ == "__main__":
     y_test_EMNIST += len(public_classes)
     
     #generate private data
-    private_data, total_private_data \
-    = generate_bal_private_data(X_train_EMNIST, y_train_EMNIST, 
-                                N_parties = N_parties,             
-                                classes_in_use = private_classes, 
-                                N_samples_per_class = N_samples_per_class, 
-                                data_overlap = False)
+    private_data, total_private_data\
+    =generate_EMNIST_writer_based_data(X_train_EMNIST, y_train_EMNIST,
+                                       writer_ids_train_EMNIST,
+                                       N_parties = N_parties, 
+                                       classes_in_use = private_classes, 
+                                       N_priv_data_min = N_samples_per_class * len(private_classes)
+                                      )
     
     X_tmp, y_tmp = generate_partial_data(X = X_test_EMNIST, y= y_test_EMNIST, 
                                          class_in_use = private_classes, verbose = True)
@@ -119,7 +120,7 @@ if __name__ == "__main__":
             parties.append(tmp)
     
     del  X_train_MNIST, y_train_MNIST, X_test_MNIST, y_test_MNIST, \
-    X_train_EMNIST, y_train_EMNIST, X_test_EMNIST, y_test_EMNIST, writer_ids_train, writer_ids_test
+    X_train_EMNIST, y_train_EMNIST, X_test_EMNIST, y_test_EMNIST, writer_ids_train_EMNIST, writer_ids_test_EMNIST
     
     
     fedmd = FedMD(parties, 

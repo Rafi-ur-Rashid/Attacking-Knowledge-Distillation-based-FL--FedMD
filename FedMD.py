@@ -44,7 +44,7 @@ class FedMD():
             model_A_twin.fit(private_data[i]["X"], private_data[i]["y"],
                              batch_size = 32, epochs = 25, shuffle=True, verbose = 0,
                              validation_data = [private_test_data["X"], private_test_data["y"]],
-                             callbacks=[EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)]
+                             callbacks=[EarlyStopping(monitor='val_accuracy', min_delta=0.001, patience=10)]
                             )
             
             print("full stack training done")
@@ -55,8 +55,8 @@ class FedMD():
                                                "model_classifier": model_A_twin,
                                                "model_weights": model_A_twin.get_weights()})
             
-            self.init_result.append({"val_acc": model_A_twin.history.history['val_acc'],
-                                     "train_acc": model_A_twin.history.history['acc'],
+            self.init_result.append({"val_acc": model_A_twin.history.history['val_accuracy'],
+                                     "train_acc": model_A_twin.history.history['accuracy'],
                                      "val_loss": model_A_twin.history.history['val_loss'],
                                      "train_loss": model_A_twin.history.history['loss'],
                                     })
@@ -74,16 +74,16 @@ class FedMD():
             model_ub.set_weights(model.get_weights())
             model_ub.compile(optimizer=tf.keras.optimizers.Adam(lr = 1e-3),
                              loss = "sparse_categorical_crossentropy", 
-                             metrics = ["acc"])
+                             metrics = ["accuracy"])
             
             model_ub.fit(total_private_data["X"], total_private_data["y"],
-                         batch_size = 32, epochs = 50, shuffle=True, verbose = 1, 
+                         batch_size = 32, epochs = 50, shuffle=True, verbose = 0, 
                          validation_data = [private_test_data["X"], private_test_data["y"]],
-                         callbacks=[EarlyStopping(monitor='val_acc', min_delta=0.001, patience=5)])
+                         callbacks=[EarlyStopping(monitor="val_accuracy", min_delta=0.001, patience=10)])
             
-            self.upper_bounds.append(model_ub.history.history["val_acc"][-1])
-            self.pooled_train_result.append({"val_acc": model_ub.history.history["val_acc"], 
-                                             "acc": model_ub.history.history["acc"]})
+            self.upper_bounds.append(model_ub.history.history["val_accuracy"][-1])
+            self.pooled_train_result.append({"val_acc": model_ub.history.history["val_accuracy"], 
+                                             "acc": model_ub.history.history["accuracy"]})
             
             del model_ub    
         print("the upper bounds are:", self.upper_bounds)
@@ -137,7 +137,7 @@ class FedMD():
                 d["model_logits"].fit(alignment_data["X"], logits, 
                                       batch_size = self.logits_matching_batchsize,  
                                       epochs = self.N_logits_matching_round, 
-                                      shuffle=True, verbose = True)
+                                      shuffle=True, verbose = 0)
                 d["model_weights"] = d["model_logits"].get_weights()
                 print("model {0} done alignment".format(index))
 
@@ -149,7 +149,7 @@ class FedMD():
                                           self.private_data[index]["y"],       
                                           batch_size = self.private_training_batchsize, 
                                           epochs = self.N_private_training_round, 
-                                          shuffle=True, verbose = True)
+                                          shuffle=True, verbose = 0)
 
                 d["model_weights"] = d["model_classifier"].get_weights()
                 print("model {0} done private training. \n".format(index))

@@ -5,10 +5,10 @@ import sys
 import pickle
 
 import numpy as np
+import pandas as pd
 from tensorflow.keras.models import load_model
 
-from data_utils import load_MNIST_data, load_EMNIST_data, generate_bal_private_data,\
-generate_partial_data
+from data_utils import load_CIFAR_data, generate_partial_data, generate_bal_private_data
 from FedMD import FedMD
 from Neural_Networks import train_models, cnn_2layer_fc_model, cnn_3layer_fc_model
 
@@ -20,7 +20,7 @@ def parseArg():
                         help='the config file for FedMD.'
                        )
 
-    conf_file = os.path.abspath("conf/EMNIST_balance_conf.json")
+    conf_file = os.path.abspath("conf/CIFAR_balance_conf.json")
     
     if len(sys.argv) > 1:
         args = parser.parse_args(sys.argv[1:])
@@ -63,29 +63,50 @@ if __name__ == "__main__":
     
     del conf_dict, conf_file
     
-    X_train_MNIST, y_train_MNIST, X_test_MNIST, y_test_MNIST \
-    = load_MNIST_data(standarized = True, verbose = True)
+    X_train_CIFAR10, y_train_CIFAR10, X_test_CIFAR10, y_test_CIFAR10 \
+    = load_CIFAR_data(data_type="CIFAR10", 
+                      standarized = True, verbose = True)
     
-    public_dataset = {"X": X_train_MNIST, "y": y_train_MNIST}
+    public_dataset = {"X": X_train_CIFAR10, "y": y_train_CIFAR10}
     
     
-    X_train_EMNIST, y_train_EMNIST, X_test_EMNIST, y_test_EMNIST, writer_ids_train, writer_ids_test \
-    = load_EMNIST_data(emnist_data_dir,
-                       standarized = True, verbose = True)
+    X_train_CIFAR100, y_train_CIFAR100, X_test_CIFAR100, y_test_CIFAR100 \
+    = load_CIFAR_data(data_type="CIFAR100",
+                      standarized = True, verbose = True)
     
-    y_train_EMNIST += len(public_classes)
-    y_test_EMNIST += len(public_classes)
+    # only use those CIFAR100 data whose y_labels belong to private_classes
+    X_train_CIFAR100, y_train_CIFAR100 \
+    = generate_partial_data(X = X_train_CIFAR100, y= y_train_CIFAR100,
+                            class_in_use = private_classes, 
+                            verbose = True)
     
+    
+    X_test_CIFAR100, y_test_CIFAR100 \
+    = generate_partial_data(X = X_test_CIFAR100, y= y_test_CIFAR100,
+                            class_in_use = private_classes, 
+                            verbose = True)
+    
+    # relabel the selected CIFAR100 data for future convenience
+    for index, cls_ in enumerate(private_classes):        
+        y_train_CIFAR100[y_train_CIFAR100 == cls_] = index + len(public_classes)
+        y_test_CIFAR100[y_test_CIFAR100 == cls_] = index + len(public_classes)
+    del index, cls_
+    
+    print(pd.Series(y_train_CIFAR100).value_counts())
+    mod_private_classes = np.arange(len(private_classes)) + len(public_classes)
+    
+    print("="*60)
     #generate private data
-    private_data, total_private_data \
-    = generate_bal_private_data(X_train_EMNIST, y_train_EMNIST, 
-                                N_parties = N_parties,             
-                                classes_in_use = private_classes, 
-                                N_samples_per_class = N_samples_per_class, 
-                                data_overlap = False)
-    
-    X_tmp, y_tmp = generate_partial_data(X = X_test_EMNIST, y= y_test_EMNIST, 
-                                         class_in_use = private_classes, verbose = True)
+    private_data, total_private_data\
+    =generate_bal_private_data(X_train_CIFAR100, y_train_CIFAR100,      
+                               N_parties = N_parties,           
+                               classes_in_use = mod_private_classes, 
+                               N_samples_per_class = N_samples_per_class, 
+                               data_overlap = False)
+    print("="*60)
+    X_tmp, y_tmp = generate_partial_data(X = X_test_CIFAR100, y= y_test_CIFAR100,
+                                         class_in_use = mod_private_classes, 
+                                         verbose = True)
     private_test_data = {"X": X_tmp, "y": y_tmp}
     del X_tmp, y_tmp
     
@@ -95,7 +116,7 @@ if __name__ == "__main__":
             model_name = item["model_type"]
             model_params = item["params"]
             tmp = CANDIDATE_MODELS[model_name](n_classes=n_classes, 
-                                               input_shape=(28,28),
+                                               input_shape=(32,32,3),
                                                **model_params)
             print("model {0} : {1}".format(i, model_saved_names[i]))
             print(tmp.summary())
@@ -104,8 +125,8 @@ if __name__ == "__main__":
             del model_name, model_params, tmp
         #END FOR LOOP
         pre_train_result = train_models(parties, 
-                                        X_train_MNIST, y_train_MNIST, 
-                                        X_test_MNIST, y_test_MNIST,
+                                        X_train_CIFAR10, y_train_CIFAR10, 
+                                        X_test_CIFAR10, y_test_CIFAR10,
                                         save_dir = model_saved_dir, save_names = model_saved_names,
                                         early_stopping = is_early_stopping,
                                         **pre_train_params
@@ -118,9 +139,8 @@ if __name__ == "__main__":
             tmp = load_model(os.path.join(dpath ,name))
             parties.append(tmp)
     
-    del  X_train_MNIST, y_train_MNIST, X_test_MNIST, y_test_MNIST, \
-    X_train_EMNIST, y_train_EMNIST, X_test_EMNIST, y_test_EMNIST, writer_ids_train, writer_ids_test
-    
+    del  X_train_CIFAR10, y_train_CIFAR10, X_test_CIFAR10, y_test_CIFAR10, \
+    X_train_CIFAR100, y_train_CIFAR100, X_test_CIFAR100, y_test_CIFAR100,
     
     fedmd = FedMD(parties, 
                   public_dataset = public_dataset,
